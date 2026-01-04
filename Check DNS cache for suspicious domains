@@ -1,0 +1,79 @@
+<# 
+    DNS Cache Suspicious Domain Checker
+    Defensive cybersecurity use only
+#>
+
+Write-Host "Collecting DNS cache entries..." -ForegroundColor Cyan
+
+# Get DNS cache entries
+$dns = Get-DnsClientCache | Select-Object -ExpandProperty Name -Unique
+
+if (-not $dns) {
+    Write-Host "No DNS cache entries found or insufficient permissions." -ForegroundColor Yellow
+    exit
+}
+
+$suspicious = @()
+
+# Suspicious indicators list
+$keywords = @(
+    "login",
+    "verify",
+    "account",
+    "secure",
+    "wallet",
+    "auth",
+    "update",
+    "support",
+    "reset",
+    "password",
+    "bank"
+)
+
+# High-risk TLDs (not always malicious, just riskier statistically)
+$riskyTLDs = @(
+    ".top",".xyz",".club",".click",".work",
+    ".support",".country",".kim",".guru",".asia"
+)
+
+# Function to detect random-looking domains
+function Is-RandomString($domain) {
+    # lots of consonants/vowels mixed quickly + long length
+    if ($domain.Length -gt 12 -and $domain -match "[a-z]{5,}[0-9]+") { return $true }
+    if ($domain -match "[a-z0-9]{15,}") { return $true }
+    return $false
+}
+
+foreach ($d in $dns) {
+
+    $flag = $false
+
+    foreach ($k in $keywords) {
+        if ($d -like "*$k*") { $flag = $true }
+    }
+
+    foreach ($t in $riskyTLDs) {
+        if ($d -like "*$t") { $flag = $true }
+    }
+
+    if (Is-RandomString $d) { $flag = $true }
+
+    if ($flag) {
+        $suspicious += $d
+    }
+}
+
+# Output paths
+$desktop = [Environment]::GetFolderPath("Desktop")
+$report = Join-Path $desktop "Suspicious_DNS_Report.txt"
+
+"Suspicious DNS Cache Domains - $(Get-Date)" | Out-File $report
+"-------------------------------------------" | Out-File $report -Append
+
+$suspicious | Sort-Object -Unique | Out-File $report -Append
+
+Write-Host ""
+Write-Host "Total DNS entries checked: $($dns.Count)"
+Write-Host "Suspicious domains flagged: $($suspicious.Count)" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Report saved to: $report" -ForegroundColor Green
